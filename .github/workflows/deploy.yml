@@ -1,0 +1,269 @@
+name: 🚀 Deploy Nursing Webboard
+
+on:
+  push:
+    branches: [ main, production ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # Allow manual deployment
+
+# Permissions needed for GitHub Pages deployment
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '18'
+  VITE_APP_ENV: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+
+jobs:
+  # ============================================================================
+  # Build Job
+  # ============================================================================
+  build:
+    name: 🔧 Build Application
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for better caching
+
+    - name: 🟢 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: |
+          package-lock.json
+          frontend/package-lock.json
+
+    - name: 📦 Install Dependencies
+      run: |
+        echo "🔍 Installing root dependencies..."
+        npm ci
+        echo "🔍 Installing frontend dependencies..."
+        cd frontend && npm ci
+
+    - name: 🔐 Setup Environment Variables
+      run: |
+        echo "🔧 Setting up environment variables..."
+        
+        # Create .env.local file for build
+        cat > frontend/.env.local << EOF
+        VITE_APP_ENV=${{ env.VITE_APP_ENV }}
+        VITE_APP_VERSION=${{ github.sha }}
+        VITE_APP_NAME=EduNursing Board
+        VITE_APP_URL=${{ vars.APP_URL || 'https://your-username.github.io/nursing-webboard' }}
+        VITE_GOOGLE_SHEETS_API_URL=${{ secrets.GOOGLE_SHEETS_API_URL }}
+        VITE_RECAPTCHA_SITE_KEY=${{ secrets.RECAPTCHA_SITE_KEY }}
+        VITE_GA_MEASUREMENT_ID=${{ secrets.GA_MEASUREMENT_ID }}
+        VITE_SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+        VITE_DEBUG=${{ env.VITE_APP_ENV == 'production' && 'false' || 'true' }}
+        FEATURE_OFFLINE_MODE=true
+        FEATURE_AUTO_BACKUP=true
+        EOF
+
+    - name: 🧪 Run Type Checking
+      run: |
+        echo "🔍 Running TypeScript type checking..."
+        cd frontend && npm run type-check
+
+    - name: 🧹 Run Linting
+      run: |
+        echo "🔍 Running ESLint..."
+        cd frontend && npm run lint
+
+    - name: 🧪 Run Tests
+      run: |
+        echo "🧪 Running test suite..."
+        cd frontend && npm run test
+      env:
+        CI: true
+
+    - name: 🏗️ Build Application
+      run: |
+        echo "🔨 Building application for ${{ env.VITE_APP_ENV }}..."
+        cd frontend && npm run build
+        
+        # Add build info
+        echo "Build: $(date)" > dist/build-info.txt
+        echo "Commit: ${{ github.sha }}" >> dist/build-info.txt
+        echo "Environment: ${{ env.VITE_APP_ENV }}" >> dist/build-info.txt
+
+    - name: 📊 Bundle Analysis (if enabled)
+      if: env.VITE_APP_ENV == 'production'
+      run: |
+        echo "📊 Analyzing bundle size..."
+        cd frontend && npm run analyze || echo "Bundle analysis not available"
+
+    - name: 🔍 Security Scan
+      run: |
+        echo "🔒 Running security audit..."
+        npm audit --audit-level moderate || echo "Security issues found - review required"
+
+    - name: 📤 Upload Build Artifacts
+      uses: actions/upload-pages-artifact@v2
+      with:
+        path: frontend/dist
+
+    - name: 📤 Upload Coverage Reports
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-reports
+        path: frontend/coverage
+        retention-days: 30
+
+  # ============================================================================
+  # Deploy to GitHub Pages
+  # ============================================================================
+  deploy-pages:
+    name: 🌐 Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    
+    steps:
+    - name: 🚀 Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v2
+
+  # ============================================================================
+  # Deploy to Vercel (Alternative)
+  # ============================================================================
+  deploy-vercel:
+    name: ▲ Deploy to Vercel
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.DEPLOY_TO_VERCEL == 'true'
+    
+    steps:
+    - name: 📥 Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: ▲ Deploy to Vercel
+      uses: amondnet/vercel-action@v25
+      with:
+        vercel-token: ${{ secrets.VERCEL_TOKEN }}
+        vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+        vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+        vercel-args: '--prod'
+
+  # ============================================================================
+  # Deploy to Netlify (Alternative)
+  # ============================================================================
+  deploy-netlify:
+    name: 🌊 Deploy to Netlify
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.DEPLOY_TO_NETLIFY == 'true'
+    
+    steps:
+    - name: 📥 Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: 🟢 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: 📦 Install Dependencies & Build
+      run: |
+        npm ci
+        cd frontend && npm ci && npm run build
+
+    - name: 🌊 Deploy to Netlify
+      uses: nwtgck/actions-netlify@v2.1
+      with:
+        publish-dir: './frontend/dist'
+        production-branch: main
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        deploy-message: "Deploy from GitHub Actions - ${{ github.sha }}"
+        enable-pull-request-comment: true
+        enable-commit-comment: true
+        overwrites-pull-request-comment: true
+      env:
+        NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+
+  # ============================================================================
+  # Notification Job
+  # ============================================================================
+  notify:
+    name: 📢 Send Notifications
+    needs: [build, deploy-pages]
+    runs-on: ubuntu-latest
+    if: always() && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: 📢 Slack Notification
+      if: secrets.SLACK_WEBHOOK_URL
+      uses: 8398a7/action-slack@v3
+      with:
+        status: ${{ job.status }}
+        channel: '#nursing-webboard'
+        username: 'GitHub Actions'
+        icon_emoji: ':rocket:'
+        title: 'Nursing Webboard Deployment'
+        message: |
+          🏥 Nursing Webboard has been deployed!
+          
+          📋 **Details:**
+          • Environment: ${{ env.VITE_APP_ENV }}
+          • Commit: `${{ github.sha }}`
+          • Actor: ${{ github.actor }}
+          • Status: ${{ job.status }}
+          
+          🔗 **Links:**
+          • [🌐 Live Site](${{ vars.APP_URL }})
+          • [📝 Commit](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+          • [🔧 Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # ============================================================================
+  # Backup Job (if enabled)
+  # ============================================================================
+  backup:
+    name: 💾 Backup Data
+    needs: deploy-pages
+    runs-on: ubuntu-latest
+    if: success() && vars.ENABLE_AUTO_BACKUP == 'true'
+    
+    steps:
+    - name: 📥 Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: 🟢 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: 💾 Run Backup Script
+      run: |
+        echo "💾 Running automated backup..."
+        npm install
+        node scripts/backup-sheets.js
+      env:
+        GOOGLE_SHEETS_API_URL: ${{ secrets.GOOGLE_SHEETS_API_URL }}
+        BACKUP_STORAGE_TYPE: ${{ vars.BACKUP_STORAGE_TYPE || 'local' }}
+
+    - name: 📤 Upload Backup
+      uses: actions/upload-artifact@v3
+      with:
+        name: backup-${{ github.sha }}
+        path: backups/
+        retention-days: 90
