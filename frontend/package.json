@@ -1,0 +1,72 @@
+{
+  "name": "nursing-webboard",
+  "version": "2.0.0",
+  "description": "Secure Educational Webboard System for Nursing Education with Google Sheets Integration",
+  "main": "index.js",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "install:all": "npm install && npm run install:frontend",
+    "install:frontend": "cd frontend && npm install",
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "preview": "cd frontend && npm run preview",
+    "lint": "cd frontend && npm run lint",
+    "type-check": "cd frontend && npm run type-check",
+    "test": "cd frontend && npm run test",
+    "deploy:frontend": "cd frontend && npm run build && npm run deploy",
+    "setup:env": "cp .env.example .env.local",
+    "setup:hooks": "npx husky install",
+    "check:security": "npm audit --recursive",
+    "backup:sheets": "node scripts/backup-sheets.js",
+    "clean": "rm -rf node_modules frontend/node_modules frontend/dist",
+    "postinstall": "npm run setup:hooks"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YOUR_USERNAME/nursing-webboard.git"
+  },
+  "keywords": [
+    "nursing",
+    "education",
+    "webboard",
+    "healthcare",
+    "google-sheets",
+    "react",
+    "typescript",
+    "security",
+    "medical-education"
+  ],
+  "author": "Your Name <your.email@example.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/YOUR_USERNAME/nursing-webboard/issues"
+  },
+  "homepage": "https://github.com/YOUR_USERNAME/nursing-webboard#readme",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "devDependencies": {
+    "husky": "^8.0.3",
+    "lint-staged": "^13.2.3",
+    "prettier": "^3.0.0",
+    "concurrently": "^8.2.0"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/YOUR_USERNAME"
+  }
+}
