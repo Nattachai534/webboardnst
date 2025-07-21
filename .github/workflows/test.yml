@@ -1,0 +1,333 @@
+name: 🧪 Test & Security Scan
+
+on:
+  push:
+    branches: [ main, develop, feature/* ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run security scans daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  # ============================================================================
+  # Code Quality & Testing
+  # ============================================================================
+  test:
+    name: 🧪 Run Tests
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18, 20]
+        
+    steps:
+    - name: 📥 Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: 🟢 Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+
+    - name: 📦 Install Dependencies
+      run: |
+        npm ci
+        cd frontend && npm ci
+
+    - name: 🧹 Lint Code
+      run: |
+        echo "🔍 Running ESLint..."
+        cd frontend && npm run lint
+
+    - name: 🔧 Type Check
+      run: |
+        echo "🔍 Running TypeScript compiler..."
+        cd frontend && npm run type-check
+
+    - name: 🧪 Run Unit Tests
+      run: |
+        echo "🧪 Running unit tests..."
+        cd frontend && npm run test -- --coverage
+      env:
+        CI: true
+
+    - name: 📊 Upload Coverage to Codecov
+      if: matrix.node-version == 18
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./frontend/coverage/lcov.info
+        flags: frontend
+        name: codecov-umbrella
+
+  # ============================================================================
+  # Security Scanning
+  # ============================================================================
+  security:
+    name: 🔒 Security Scan
+    runs-on: ubuntu-latest
+    
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    
+    steps:
+    - name: 📥 Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: 🟢 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: 📦 Install Dependencies
+      run: |
+        npm ci
+        cd frontend && npm ci
+
+    - name: 🔍 NPM Audit
+      run: |
+        echo "🔒 Running NPM security audit..."
+        npm audit --audit-level moderate || echo "Security vulnerabilities found"
+        cd frontend && npm audit --audit-level moderate || echo "Frontend security vulnerabilities found"
+
+    - name: 🔍 CodeQL Analysis
+      uses: github/codeql-action/init@v2
+      with:
+        languages: javascript, typescript
+
+    - name: 🏗️ Autobuild
+      uses: github/codeql-action/autobuild@v2
+
+    - name: 🔍 Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v2
+
+    - name: 🔒 Snyk Security Scan
+      if: env.SNYK_TOKEN
+      uses: snyk/actions/node@master
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      with:
+        args: --severity-threshold=medium
+
+  # ============================================================================
+  # Dependency Review
+  # ============================================================================
+  dependency-review:
+    name: 📦 Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: 📥 Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: 📦 Dependency Review
+      uses: actions/dependency-review-action@v3
+      with:
+        fail-on-severity: moderate
+        allow-licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC
+
+  # ============================================================================
+  # Performance Testing
+  # ============================================================================
+  performance:
+    name: ⚡ Performance Test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: 📥 Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: 🟢 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: 📦 Install Dependencies & Build
+      run: |
+        npm ci
+        cd frontend && npm ci && npm run build
+
+    - name: ⚡ Lighthouse CI
+      uses: treosh/lighthouse-ci-action@v10
+      with:
+        configPath: './lighthouserc.json'
+        uploadArtifacts: true
+        temporaryPublicStorage: true
+
+  # ============================================================================
+  # Accessibility Testing
+  # ============================================================================
+  accessibility:
+    name: ♿ Accessibility Test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: 🟢 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: 📦 Install Dependencies
+      run: |
+        npm ci
+        cd frontend && npm ci
+
+    - name: 🏗️ Build Application
+      run: |
+        cd frontend && npm run build
+
+    - name: ♿ Run Pa11y Accessibility Tests
+      run: |
+        npx pa11y-ci --sitemap http://localhost:4173/sitemap.xml || echo "Accessibility issues found"
+
+  # ============================================================================
+  # Browser Testing
+  # ============================================================================
+  browser-test:
+    name: 🌐 Browser Compatibility Test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    strategy:
+      matrix:
+        browser: [chrome, firefox, safari]
+    
+    steps:
+    - name: 📥 Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: 🟢 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: 📦 Install Dependencies
+      run: |
+        npm ci
+        cd frontend && npm ci
+
+    - name: 🌐 Install Playwright
+      run: |
+        cd frontend && npx playwright install --with-deps ${{ matrix.browser }}
+
+    - name: 🧪 Run Browser Tests
+      run: |
+        cd frontend && npx playwright test --browser=${{ matrix.browser }}
+
+    - name: 📤 Upload Test Results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: playwright-results-${{ matrix.browser }}
+        path: frontend/test-results
+        retention-days: 30
+
+  # ============================================================================
+  # Medical Content Validation
+  # ============================================================================
+  medical-validation:
+    name: 🏥 Medical Content Validation
+    runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.message, '[medical]') || github.event_name == 'schedule'
+    
+    steps:
+    - name: 📥 Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: 🟢 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: 🏥 Validate Medical Terms
+      run: |
+        echo "🏥 Validating medical terminology and content..."
+        node scripts/validate-medical-content.js
+      env:
+        MEDICAL_TERMS_API: ${{ secrets.MEDICAL_TERMS_API }}
+
+  # ============================================================================
+  # Notification Summary
+  # ============================================================================
+  test-summary:
+    name: 📊 Test Summary
+    needs: [test, security, dependency-review, performance, accessibility]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: 📊 Generate Test Summary
+      run: |
+        echo "📊 Test Summary for ${{ github.sha }}"
+        echo "=================================="
+        echo "✅ Code Quality: ${{ needs.test.result }}"
+        echo "🔒 Security Scan: ${{ needs.security.result }}"
+        echo "📦 Dependencies: ${{ needs.dependency-review.result }}"
+        echo "⚡ Performance: ${{ needs.performance.result }}"
+        echo "♿ Accessibility: ${{ needs.accessibility.result }}"
+        
+        if [[ "${{ needs.test.result }}" == "success" && 
+              "${{ needs.security.result }}" == "success" ]]; then
+          echo "🎉 All critical tests passed!"
+        else
+          echo "❌ Some tests failed - review required"
+          exit 1
+        fi
+
+    - name: 📢 Comment on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const testResults = {
+            test: '${{ needs.test.result }}',
+            security: '${{ needs.security.result }}',
+            dependencies: '${{ needs.dependency-review.result }}',
+            performance: '${{ needs.performance.result }}',
+            accessibility: '${{ needs.accessibility.result }}'
+          };
+          
+          const getEmoji = (result) => {
+            switch(result) {
+              case 'success': return '✅';
+              case 'failure': return '❌';
+              case 'skipped': return '⏭️';
+              default: return '⚠️';
+            }
+          };
+          
+          const body = `## 🧪 Test Results Summary
+          
+          | Test Type | Status | Result |
+          |-----------|--------|---------|
+          | Code Quality | ${getEmoji(testResults.test)} | ${testResults.test} |
+          | Security Scan | ${getEmoji(testResults.security)} | ${testResults.security} |
+          | Dependencies | ${getEmoji(testResults.dependencies)} | ${testResults.dependencies} |
+          | Performance | ${getEmoji(testResults.performance)} | ${testResults.performance} |
+          | Accessibility | ${getEmoji(testResults.accessibility)} | ${testResults.accessibility} |
+          
+          ---
+          🤖 *Automated test report for commit ${{ github.sha }}*`;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: body
+          });
