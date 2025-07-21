@@ -1,0 +1,262 @@
+# frontend/package.json
+
+{
+  "name": "nursing-webboard-frontend",
+  "version": "2.0.0",
+  "description": "Frontend for Nursing Webboard - Educational Platform",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "lint:fix": "eslint . --ext ts,tsx --fix",
+    "type-check": "tsc --noEmit",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "analyze": "npm run build && npx vite-bundle-analyzer dist/stats.html",
+    "clean": "rm -rf dist node_modules/.vite",
+    "deps:update": "npx npm-check-updates -u && npm install",
+    "security:audit": "npm audit --audit-level moderate",
+    "prepare": "cd .. && husky install"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "lucide-react": "^0.263.1",
+    "clsx": "^2.0.0",
+    "tailwind-merge": "^1.14.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.15",
+    "@types/react-dom": "^18.2.7",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@vitejs/plugin-react": "^4.0.3",
+    "@vitest/ui": "^0.34.0",
+    "autoprefixer": "^10.4.14",
+    "eslint": "^8.45.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.3",
+    "eslint-plugin-security": "^1.7.1",
+    "eslint-plugin-jsx-a11y": "^6.7.1",
+    "jsdom": "^22.1.0",
+    "postcss": "^8.4.27",
+    "prettier": "^3.0.0",
+    "prettier-plugin-tailwindcss": "^0.5.3",
+    "tailwindcss": "^3.3.0",
+    "typescript": "^5.0.2",
+    "vite": "^4.4.5",
+    "vite-bundle-analyzer": "^0.7.0",
+    "vite-plugin-pwa": "^0.16.4",
+    "vitest": "^0.34.0",
+    "@playwright/test": "^1.37.0",
+    "workbox-window": "^7.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}
+
+---
+
+# scripts/setup.sh
+#!/bin/bash
+
+set -e  # Exit on any error
+
+echo "🏥 Setting up Nursing Webboard..."
+echo "=================================="
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Function to print colored output
+print_status() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Check if Node.js is installed
+check_node() {
+    print_status "Checking Node.js installation..."
+    if ! command -v node &> /dev/null; then
+        print_error "Node.js is not installed. Please install Node.js 18+ from https://nodejs.org/"
+        exit 1
+    fi
+    
+    NODE_VERSION=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
+    if [ "$NODE_VERSION" -lt 18 ]; then
+        print_error "Node.js version 18+ is required. Current version: $(node --version)"
+        exit 1
+    fi
+    
+    print_success "Node.js $(node --version) found"
+}
+
+# Check if npm is installed
+check_npm() {
+    print_status "Checking npm installation..."
+    if ! command -v npm &> /dev/null; then
+        print_error "npm is not installed. Please install npm"
+        exit 1
+    fi
+    
+    print_success "npm $(npm --version) found"
+}
+
+# Install dependencies
+install_dependencies() {
+    print_status "Installing dependencies..."
+    
+    # Install root dependencies
+    print_status "Installing root dependencies..."
+    npm install
+    
+    # Install frontend dependencies
+    print_status "Installing frontend dependencies..."
+    cd frontend && npm install && cd ..
+    
+    print_success "All dependencies installed"
+}
+
+# Setup environment variables
+setup_environment() {
+    print_status "Setting up environment variables..."
+    
+    if [ ! -f ".env.local" ]; then
+        if [ -f ".env.example" ]; then
+            cp .env.example .env.local
+            print_success "Created .env.local from .env.example"
+            print_warning "Please edit .env.local with your actual configuration values"
+        else
+            print_warning ".env.example not found, creating basic .env.local"
+            cat > .env.local << EOF
+# Nursing Webboard Environment Variables
+VITE_GOOGLE_SHEETS_API_URL=https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec
+VITE_APP_ENV=development
+VITE_APP_VERSION=2.0.0
+VITE_DEBUG=true
+EOF
+            print_warning "Basic .env.local created. Please update with your values."
+        fi
+    else
+        print_success ".env.local already exists"
+    fi
+}
+
+# Setup Git hooks
+setup_git_hooks() {
+    print_status "Setting up Git hooks..."
+    
+    if [ -d ".git" ]; then
+        npx husky install
+        print_success "Git hooks installed"
+    else
+        print_warning "Not a Git repository, skipping Git hooks setup"
+    fi
+}
+
+# Verify installation
+verify_installation() {
+    print_status "Verifying installation..."
+    
+    # Check if TypeScript compiles
+    print_status "Checking TypeScript compilation..."
+    cd frontend && npm run type-check && cd ..
+    print_success "TypeScript compilation successful"
+    
+    # Check if linting passes
+    print_status "Running linter..."
+    cd frontend && npm run lint && cd ..
+    print_success "Linting passed"
+    
+    # Run tests
+    print_status "Running tests..."
+    cd frontend && npm run test -- --run && cd ..
+    print_success "Tests passed"
+}
+
+# Display next steps
+show_next_steps() {
+    echo ""
+    echo "🎉 Setup completed successfully!"
+    echo "==============================="
+    echo ""
+    echo "📋 Next steps:"
+    echo ""
+    echo "1. 📝 Configure Google Sheets backend:"
+    echo "   - Follow the guide in docs/backend-setup.md"
+    echo "   - Update VITE_GOOGLE_SHEETS_API_URL in .env.local"
+    echo ""
+    echo "2. 🚀 Start development server:"
+    echo "   npm run dev"
+    echo ""
+    echo "3. 🌐 Open your browser to:"
+    echo "   http://localhost:5173"
+    echo ""
+    echo "4. 🧪 Test the application:"
+    echo "   - Login with: admin (password: any)"
+    echo "   - 2FA code: 123456"
+    echo ""
+    echo "📚 Additional resources:"
+    echo "   - 📖 Documentation: ./docs/"
+    echo "   - 🔒 Security guide: ./SECURITY.md"
+    echo "   - 🤝 Contributing: ./CONTRIBUTING.md"
+    echo ""
+    echo "🆘 Need help?"
+    echo "   - Create an issue: https://github.com/YOUR_USERNAME/nursing-webboard/issues"
+    echo "   - Check discussions: https://github.com/YOUR_USERNAME/nursing-webboard/discussions"
+    echo ""
+}
+
+# Main setup function
+main() {
+    echo "🏥 Nursing Webboard Setup Script"
+    echo "================================"
+    echo ""
+    
+    check_node
+    check_npm
+    install_dependencies
+    setup_environment
+    setup_git_hooks
+    verify_installation
+    show_next_steps
+}
+
+# Run main function
+main
